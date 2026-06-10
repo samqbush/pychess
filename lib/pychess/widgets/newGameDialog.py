@@ -1093,48 +1093,98 @@ class SetupPositionExtension(_GameInitializationMode):
 
     @classmethod
     def castl_toggled(cls, button, castl):
-        lboard = cls.setupmodel.boards[-1].board
-        # TODO: this doesn't work at all
-        if lboard.variant == FISCHERRANDOMCHESS:
-            if castl == W_OO:
-                cast_letter = reprCord[lboard.ini_rooks[0][1]][0].upper()
-            elif castl == W_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[0][0]][0].upper()
-            elif castl == B_OO:
-                cast_letter = reprCord[lboard.ini_rooks[1][1]][0]
-            elif castl == B_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[1][0]][0]
-        else:
-            if castl == W_OO:
-                cast_letter = "K"
-            elif castl == W_OOO:
-                cast_letter = "Q"
-            elif castl == B_OO:
-                cast_letter = "k"
-            elif castl == B_OOO:
-                cast_letter = "q"
-
-        if button.get_active():
-            cls.castl.add(cast_letter)
-        else:
-            cls.castl.discard(cast_letter)
         cls.fen_changed()
 
     @classmethod
-    def get_fen(cls):
-        # Find variant
+    def _get_variant_index(cls):
         if cls.widgets["playNormalRadio"].get_active():
-            variant_index = NORMALCHESS
+            return NORMALCHESS
         elif cls.widgets["playVariant1Radio"].get_active():
-            variant_index = conf.get("ngvariant1")
+            return conf.get("ngvariant1")
         else:
-            variant_index = conf.get("ngvariant2")
+            return conf.get("ngvariant2")
+
+    @staticmethod
+    def _get_castling_mask():
+        castling = 0
+        if SetupPositionExtension.widgets["woo"].get_active():
+            castling |= W_OO
+        if SetupPositionExtension.widgets["wooo"].get_active():
+            castling |= W_OOO
+        if SetupPositionExtension.widgets["boo"].get_active():
+            castling |= B_OO
+        if SetupPositionExtension.widgets["booo"].get_active():
+            castling |= B_OOO
+        return castling
+
+    @staticmethod
+    def _expand_rank(rank):
+        files = []
+        for char in rank:
+            if char.isdigit():
+                files.extend([None] * int(char))
+            else:
+                files.append(char)
+        return files
+
+    @classmethod
+    def _get_frc_castling(cls, pieces, castling):
+        board = LBoard(FISCHERRANDOMCHESS)
+        board.ini_rooks = ([None, None], [None, None])
+        effective_castling = 0
+        ranks = pieces.split("/")
+
+        for color, rank, king_piece, rook_piece, offset in (
+            (WHITE, ranks[-1], "K", "R", 0),
+            (BLACK, ranks[0], "k", "r", 56),
+        ):
+            expanded_rank = cls._expand_rank(rank)
+            king_file = expanded_rank.index(king_piece)
+            rook_files = [i for i, piece in enumerate(expanded_rank) if piece == rook_piece]
+            queenside_rooks = [rook_file for rook_file in rook_files if rook_file < king_file]
+            kingside_rooks = [rook_file for rook_file in rook_files if rook_file > king_file]
+
+            queenside_rook = max(queenside_rooks) if queenside_rooks else None
+            kingside_rook = min(kingside_rooks) if kingside_rooks else None
+
+            if color == WHITE:
+                if castling & W_OOO and queenside_rook is not None:
+                    board.ini_rooks[color][0] = offset + queenside_rook
+                    effective_castling |= W_OOO
+                if castling & W_OO and kingside_rook is not None:
+                    board.ini_rooks[color][1] = offset + kingside_rook
+                    effective_castling |= W_OO
+            else:
+                if castling & B_OOO and queenside_rook is not None:
+                    board.ini_rooks[color][0] = offset + queenside_rook
+                    effective_castling |= B_OOO
+                if castling & B_OO and kingside_rook is not None:
+                    board.ini_rooks[color][1] = offset + kingside_rook
+                    effective_castling |= B_OO
+
+        board.castling = effective_castling
+        return board.reprCastling()
+
+    @classmethod
+    def _get_castling_fen(cls, pieces, variant_index, castling):
+        if not castling:
+            return "-"
+        if variant_index == FISCHERRANDOMCHESS:
+            return cls._get_frc_castling(pieces, castling)
+
+        board = LBoard(variant_index)
+        board.castling = castling
+        return board.reprCastling()
+
+    @classmethod
+    def get_fen(cls):
+        variant_index = cls._get_variant_index()
         variant = variants[variant_index]
 
         pieces = cls.setupmodel.boards[-1].as_fen(variant.variant)
 
         side = "b" if cls.widgets["side_button"].get_active() else "w"
-        castl = "".join(sorted(cls.castl)) if cls.castl else "-"
+        castl = cls._get_castling_fen(pieces, variant_index, cls._get_castling_mask())
 
         ep = "-"
         rank = "3" if side == "b" else "6"
