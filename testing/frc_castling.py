@@ -12,8 +12,13 @@ from pychess.Utils.const import (
     H1,
     H8,
     FISCHERRANDOMCHESS,
+    SETUPCHESS,
     KING_CASTLE,
     QUEEN_CASTLE,
+    W_OO,
+    W_OOO,
+    B_OO,
+    B_OOO,
 )
 from pychess.Utils.lutils.LBoard import LBoard
 from pychess.Utils.lutils.lmove import parseAN
@@ -71,6 +76,78 @@ class FRCCastlingTestCase(unittest.TestCase):
         # print board
         moves = [move for move in genCastles(board)]
         self.assertTrue(parseAN(board, "e1g1") in moves)
+
+
+class SetupChessFileCastlingTestCase(unittest.TestCase):
+    """Tests for LBoard.applyFen() SETUPCHESS + X-FEN file-letter castling (issue #1869)."""
+
+    def _load(self, fen):
+        board = LBoard(SETUPCHESS)
+        board.applyFen(fen)
+        return board
+
+    def test_classical_kqkq_unchanged(self):
+        """Classical KQkq still parsed correctly in SETUPCHESS."""
+        board = self._load("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1")
+        self.assertTrue(board.castling & W_OO)
+        self.assertTrue(board.castling & W_OOO)
+        self.assertTrue(board.castling & B_OO)
+        self.assertTrue(board.castling & B_OOO)
+
+    def test_file_letters_full(self):
+        """Full AHah file-letter castling parsed correctly in SETUPCHESS."""
+        board = self._load("r3k2r/8/8/8/8/8/8/R3K2R w AHah - 0 1")
+        self.assertTrue(board.castling & W_OO, "W_OO should be set for H")
+        self.assertTrue(board.castling & W_OOO, "W_OOO should be set for A")
+        self.assertTrue(board.castling & B_OO, "B_OO should be set for h")
+        self.assertTrue(board.castling & B_OOO, "B_OOO should be set for a")
+
+    def test_file_letters_partial_kingside_only(self):
+        """Only kingside file letters set W_OO/B_OO in SETUPCHESS."""
+        board = self._load("2r1k2r/8/8/8/8/8/8/2R1K2R w Hh - 0 1")
+        self.assertTrue(board.castling & W_OO)
+        self.assertFalse(board.castling & W_OOO)
+        self.assertTrue(board.castling & B_OO)
+        self.assertFalse(board.castling & B_OOO)
+
+    def test_file_letters_partial_queenside_only(self):
+        """Only queenside file letters set W_OOO/B_OOO in SETUPCHESS."""
+        board = self._load("r3k3/8/8/8/8/8/8/R3K3 w Aa - 0 1")
+        self.assertFalse(board.castling & W_OO)
+        self.assertTrue(board.castling & W_OOO)
+        self.assertFalse(board.castling & B_OO)
+        self.assertTrue(board.castling & B_OOO)
+
+    def test_no_castling(self):
+        """Dash castling field sets castling to 0 in SETUPCHESS."""
+        board = self._load("r3k2r/8/8/8/8/8/8/R3K2R w - - 0 1")
+        self.assertEqual(board.castling, 0)
+
+    def test_non_ah_frc_position(self):
+        """Non-standard FRC file letters (e.g. CH/ch) parsed correctly in SETUPCHESS."""
+        # King on g1/g8, rooks on c1/h1 and c8/h8
+        board = self._load("1br3kr/2p5/8/8/8/8/2P5/1BR3KR w CHch - 0 1")
+        self.assertTrue(board.castling & W_OO, "H > G king, so W_OO")
+        self.assertTrue(board.castling & W_OOO, "C < G king, so W_OOO")
+        self.assertTrue(board.castling & B_OO)
+        self.assertTrue(board.castling & B_OOO)
+
+    def test_reprCastling_roundtrip_via_frc_board(self):
+        """FRC LBoard.reprCastling() round-trips AHah position consistently."""
+        board = LBoard(FISCHERRANDOMCHESS)
+        board.applyFen("r3k2r/8/8/8/8/8/8/R3K2R w AHah - 0 1")
+        # All four castling rights should be set
+        self.assertTrue(board.castling & W_OO)
+        self.assertTrue(board.castling & W_OOO)
+        self.assertTrue(board.castling & B_OO)
+        self.assertTrue(board.castling & B_OOO)
+        # reprCastling should produce a non-empty result
+        result = board.reprCastling()
+        self.assertNotEqual(result, "-")
+        self.assertIn("H", result)
+        self.assertIn("A", result)
+        self.assertIn("h", result)
+        self.assertIn("a", result)
 
 
 if __name__ == "__main__":

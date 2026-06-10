@@ -44,12 +44,12 @@ from pychess.Utils.const import (
     UNSUPPORTED,
     ARTIFICIAL,
     LOCAL,
-    reprCord,
     reprFile,
     W_OO,
     W_OOO,
     B_OO,
     B_OOO,
+    ROOK,
     FAN_PIECES,
     reprSign,
     FEN_START,
@@ -1093,31 +1093,10 @@ class SetupPositionExtension(_GameInitializationMode):
 
     @classmethod
     def castl_toggled(cls, button, castl):
-        lboard = cls.setupmodel.boards[-1].board
-        # TODO: this doesn't work at all
-        if lboard.variant == FISCHERRANDOMCHESS:
-            if castl == W_OO:
-                cast_letter = reprCord[lboard.ini_rooks[0][1]][0].upper()
-            elif castl == W_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[0][0]][0].upper()
-            elif castl == B_OO:
-                cast_letter = reprCord[lboard.ini_rooks[1][1]][0]
-            elif castl == B_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[1][0]][0]
-        else:
-            if castl == W_OO:
-                cast_letter = "K"
-            elif castl == W_OOO:
-                cast_letter = "Q"
-            elif castl == B_OO:
-                cast_letter = "k"
-            elif castl == B_OOO:
-                cast_letter = "q"
-
         if button.get_active():
-            cls.castl.add(cast_letter)
+            cls.castl.add(castl)
         else:
-            cls.castl.discard(cast_letter)
+            cls.castl.discard(castl)
         cls.fen_changed()
 
     @classmethod
@@ -1134,7 +1113,56 @@ class SetupPositionExtension(_GameInitializationMode):
         pieces = cls.setupmodel.boards[-1].as_fen(variant.variant)
 
         side = "b" if cls.widgets["side_button"].get_active() else "w"
-        castl = "".join(sorted(cls.castl)) if cls.castl else "-"
+
+        if not cls.castl:
+            castl = "-"
+        elif variant.variant == FISCHERRANDOMCHESS:
+            # Build a temporary FRC board to use reprCastling()
+            tmp = LBoard(FISCHERRANDOMCHESS)
+            tmp.applyFen("%s %s - - 0 1" % (pieces, side))
+            castling_mask = 0
+            for flag in cls.castl:
+                castling_mask |= flag
+            tmp.castling = castling_mask
+            # Scan back ranks to populate ini_rooks
+            wking_file = tmp.kings[WHITE] % 8
+            bking_file = (tmp.kings[BLACK] - 56) % 8
+            w_ks = max(
+                (s for s in range(8) if tmp.arBoard[s] == ROOK and (tmp.friends[WHITE] >> s) & 1 and s > wking_file),
+                default=None,
+            )
+            w_qs = min(
+                (s for s in range(8) if tmp.arBoard[s] == ROOK and (tmp.friends[WHITE] >> s) & 1 and s < wking_file),
+                default=None,
+            )
+            b_ks = max(
+                (s for s in range(56, 64) if tmp.arBoard[s] == ROOK and (tmp.friends[BLACK] >> s) & 1 and (s - 56) > bking_file),
+                default=None,
+            )
+            b_qs = min(
+                (s for s in range(56, 64) if tmp.arBoard[s] == ROOK and (tmp.friends[BLACK] >> s) & 1 and (s - 56) < bking_file),
+                default=None,
+            )
+            if w_ks is not None:
+                tmp.ini_rooks[0][1] = w_ks
+            if w_qs is not None:
+                tmp.ini_rooks[0][0] = w_qs
+            if b_ks is not None:
+                tmp.ini_rooks[1][1] = b_ks
+            if b_qs is not None:
+                tmp.ini_rooks[1][0] = b_qs
+            castl = tmp.reprCastling()
+        else:
+            strs = []
+            if W_OO in cls.castl:
+                strs.append("K")
+            if W_OOO in cls.castl:
+                strs.append("Q")
+            if B_OO in cls.castl:
+                strs.append("k")
+            if B_OOO in cls.castl:
+                strs.append("q")
+            castl = "".join(strs) or "-"
 
         ep = "-"
         rank = "3" if side == "b" else "6"

@@ -448,6 +448,20 @@ class LBoard:
                     castling |= B_OO
                 elif char == "q":
                     castling |= B_OOO
+                elif self.variant == SETUPCHESS and char.lower() in reprFile:
+                    # X-FEN file-letter castling rights from a Chess960 position
+                    if char.islower():  # a-h: black castling right
+                        king_file = reprCord[self.kings[BLACK]][0]
+                        if char < king_file:
+                            castling |= B_OOO
+                        else:
+                            castling |= B_OO
+                    else:  # A-H: white castling right
+                        king_file = reprCord[self.kings[WHITE]][0]
+                        if char.lower() < king_file:
+                            castling |= W_OOO
+                        else:
+                            castling |= W_OO
 
             if self.variant == SCHESS:
                 if char == "K":
