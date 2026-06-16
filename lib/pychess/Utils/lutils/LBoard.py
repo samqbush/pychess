@@ -440,7 +440,21 @@ class LBoard:
                     castling |= B_OOO
                     self.ini_rooks[1][0] = rank8.find("r") + 56
             else:
-                if char == "K":
+                if self.variant == SETUPCHESS and char in reprFile:
+                    # X-FEN file-letter castling rights (lowercase -> black)
+                    if char < reprCord[self.kings[BLACK]][0]:
+                        castling |= B_OOO
+                    else:
+                        castling |= B_OO
+                elif self.variant == SETUPCHESS and char in [
+                    c.upper() for c in reprFile
+                ]:
+                    # X-FEN file-letter castling rights (uppercase -> white)
+                    if char < reprCord[self.kings[WHITE]][0].upper():
+                        castling |= W_OOO
+                    else:
+                        castling |= W_OO
+                elif char == "K":
                     castling |= W_OO
                 elif char == "Q":
                     castling |= W_OOO

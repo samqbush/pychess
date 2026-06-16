@@ -172,6 +172,53 @@ class DialogTests(unittest.IsolatedAsyncioTestCase):
 
         dd.close()
 
+    async def test6(self):
+        """Setup dialog emits/loads Chess960 X-FEN file-letter castling"""
+        from pychess.Utils.const import (
+            FISCHERRANDOMCHESS,
+            SETUPCHESS,
+            W_OO,
+            W_OOO,
+            B_OO,
+            B_OOO,
+        )
+        from pychess.Utils.lutils.LBoard import LBoard
+
+        Setup = newGameDialog.SetupPositionExtension
+        saved = Setup.castl
+        try:
+            # Output path (get_fen): a standard FRC start round-trips to file
+            # letters through reprCastling() rather than KQkq or "-".
+            Setup.castl = {W_OO, W_OOO, B_OO, B_OOO}
+            std = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
+            self.assertEqual(
+                Setup._castling_field(FISCHERRANDOMCHESS, std, "w"), "HAha"
+            )
+
+            # Asymmetric Chess960 placement (rooks on b/g files, king on e).
+            asym = "nrbnkqbr/pppppppp/8/8/8/8/PPPPPPPP/NRBNKQBR"
+            self.assertEqual(
+                Setup._castling_field(FISCHERRANDOMCHESS, asym, "w"), "HBhb"
+            )
+
+            # Classical chess must still produce canonical KQkq (no regression).
+            self.assertEqual(Setup._castling_field(NORMALCHESS, std, "w"), "KQkq")
+
+            # No castling flags -> "-".
+            Setup.castl = set()
+            self.assertEqual(Setup._castling_field(NORMALCHESS, std, "w"), "-")
+
+            # Load path (ini_widgets): SETUPCHESS parser understands file letters
+            # so the checkboxes can be populated from a Chess960 FEN.
+            lb = LBoard(SETUPCHESS)
+            lb.applyFen("nrbnkqbr/pppppppp/8/8/8/8/PPPPPPPP/NRBNKQBR w BGbg - 0 1")
+            self.assertTrue(lb.castling & W_OO)
+            self.assertTrue(lb.castling & W_OOO)
+            self.assertTrue(lb.castling & B_OO)
+            self.assertTrue(lb.castling & B_OOO)
+        finally:
+            Setup.castl = saved
+
 
 if __name__ == "__main__":
     unittest.main()

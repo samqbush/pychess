@@ -44,7 +44,7 @@ from pychess.Utils.const import (
     UNSUPPORTED,
     ARTIFICIAL,
     LOCAL,
-    reprCord,
+    ROOK,
     reprFile,
     W_OO,
     W_OOO,
@@ -1093,32 +1093,65 @@ class SetupPositionExtension(_GameInitializationMode):
 
     @classmethod
     def castl_toggled(cls, button, castl):
-        lboard = cls.setupmodel.boards[-1].board
-        # TODO: this doesn't work at all
-        if lboard.variant == FISCHERRANDOMCHESS:
-            if castl == W_OO:
-                cast_letter = reprCord[lboard.ini_rooks[0][1]][0].upper()
-            elif castl == W_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[0][0]][0].upper()
-            elif castl == B_OO:
-                cast_letter = reprCord[lboard.ini_rooks[1][1]][0]
-            elif castl == B_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[1][0]][0]
-        else:
-            if castl == W_OO:
-                cast_letter = "K"
-            elif castl == W_OOO:
-                cast_letter = "Q"
-            elif castl == B_OO:
-                cast_letter = "k"
-            elif castl == B_OOO:
-                cast_letter = "q"
-
         if button.get_active():
-            cls.castl.add(cast_letter)
+            cls.castl.add(castl)
         else:
-            cls.castl.discard(cast_letter)
+            cls.castl.discard(castl)
         cls.fen_changed()
+
+    @classmethod
+    def _castling_field(cls, variant, pieces, side):
+        # Build the FEN castling availability field from the abstract castling
+        # flags stored in cls.castl, honouring the dialog's selected variant.
+        if not cls.castl:
+            return "-"
+
+        if variant == FISCHERRANDOMCHESS:
+            lboard = LBoard(FISCHERRANDOMCHESS)
+            lboard.applyFen("%s %s - - 0 1" % (pieces, side))
+
+            king_w = lboard.kings[WHITE]
+            king_b = lboard.kings[BLACK]
+            w_rooks = [cord for cord in range(0, 8) if lboard.arBoard[cord] == ROOK]
+            b_rooks = [cord for cord in range(56, 64) if lboard.arBoard[cord] == ROOK]
+
+            ini_rooks = ([None, None], [None, None])
+            castling = 0
+            if W_OO in cls.castl and king_w is not None:
+                outer = [cord for cord in w_rooks if cord > king_w]
+                if outer:
+                    ini_rooks[0][1] = max(outer)
+                    castling |= W_OO
+            if W_OOO in cls.castl and king_w is not None:
+                outer = [cord for cord in w_rooks if cord < king_w]
+                if outer:
+                    ini_rooks[0][0] = min(outer)
+                    castling |= W_OOO
+            if B_OO in cls.castl and king_b is not None:
+                outer = [cord for cord in b_rooks if cord > king_b]
+                if outer:
+                    ini_rooks[1][1] = max(outer)
+                    castling |= B_OO
+            if B_OOO in cls.castl and king_b is not None:
+                outer = [cord for cord in b_rooks if cord < king_b]
+                if outer:
+                    ini_rooks[1][0] = min(outer)
+                    castling |= B_OOO
+
+            lboard.ini_rooks = ini_rooks
+            lboard.castling = castling
+            return lboard.reprCastling()
+
+        strs = []
+        if W_OO in cls.castl:
+            strs.append("K")
+        if W_OOO in cls.castl:
+            strs.append("Q")
+        if B_OO in cls.castl:
+            strs.append("k")
+        if B_OOO in cls.castl:
+            strs.append("q")
+        return "".join(strs) if strs else "-"
 
     @classmethod
     def get_fen(cls):
@@ -1134,7 +1167,7 @@ class SetupPositionExtension(_GameInitializationMode):
         pieces = cls.setupmodel.boards[-1].as_fen(variant.variant)
 
         side = "b" if cls.widgets["side_button"].get_active() else "w"
-        castl = "".join(sorted(cls.castl)) if cls.castl else "-"
+        castl = cls._castling_field(variant.variant, pieces, side)
 
         ep = "-"
         rank = "3" if side == "b" else "6"
