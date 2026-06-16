@@ -44,7 +44,6 @@ from pychess.Utils.const import (
     UNSUPPORTED,
     ARTIFICIAL,
     LOCAL,
-    reprCord,
     reprFile,
     W_OO,
     W_OOO,
@@ -1093,32 +1092,86 @@ class SetupPositionExtension(_GameInitializationMode):
 
     @classmethod
     def castl_toggled(cls, button, castl):
-        lboard = cls.setupmodel.boards[-1].board
-        # TODO: this doesn't work at all
-        if lboard.variant == FISCHERRANDOMCHESS:
-            if castl == W_OO:
-                cast_letter = reprCord[lboard.ini_rooks[0][1]][0].upper()
-            elif castl == W_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[0][0]][0].upper()
-            elif castl == B_OO:
-                cast_letter = reprCord[lboard.ini_rooks[1][1]][0]
-            elif castl == B_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[1][0]][0]
-        else:
-            if castl == W_OO:
-                cast_letter = "K"
-            elif castl == W_OOO:
-                cast_letter = "Q"
-            elif castl == B_OO:
-                cast_letter = "k"
-            elif castl == B_OOO:
-                cast_letter = "q"
-
         if button.get_active():
-            cls.castl.add(cast_letter)
+            cls.castl.add(castl)
         else:
-            cls.castl.discard(cast_letter)
+            cls.castl.discard(castl)
         cls.fen_changed()
+
+    @classmethod
+    def _castling_fen(cls, variant_index, pieces):
+        """Return the castling field for the FEN string.
+
+        For Fischer Random / Chess960 (FISCHERRANDOMCHESS) we build a temporary
+        LBoard, set its castling mask from the abstract flags stored in
+        ``cls.castl``, populate ``ini_rooks`` by scanning the back ranks for
+        the outermost rook on each side of the king, and delegate to the
+        engine's own ``reprCastling()`` so the file-letter X-FEN notation is
+        produced correctly.
+
+        For all other variants we map flags to the canonical KQkq letters.
+        """
+        if not cls.castl:
+            return "-"
+
+        if variant_index == FISCHERRANDOMCHESS:
+            tmp = LBoard(FISCHERRANDOMCHESS)
+            tmp.applyFen(pieces + " w - - 0 1")
+            rank1 = pieces.split("/")[7] if "/" in pieces else ""
+            rank8 = pieces.split("/")[0] if "/" in pieces else ""
+            king_file_w = FILE(tmp.kings[0])
+            king_file_b = FILE(tmp.kings[1])
+
+            def rank_to_piece_files(rank_str):
+                """Expand a FEN rank string to a list of (file, char) pairs."""
+                result = []
+                f = 0
+                for ch in rank_str:
+                    if ch.isdigit():
+                        f += int(ch)
+                    else:
+                        result.append((f, ch))
+                        f += 1
+                return result
+
+            w_rook_f = [f for f, c in rank_to_piece_files(rank1) if c == "R"]
+            b_rook_f = [f for f, c in rank_to_piece_files(rank8) if c == "r"]
+            oo_w = max((f for f in w_rook_f if f > king_file_w), default=None)
+            ooo_w = min((f for f in w_rook_f if f < king_file_w), default=None)
+            oo_b = max((f for f in b_rook_f if f > king_file_b), default=None)
+            ooo_b = min((f for f in b_rook_f if f < king_file_b), default=None)
+            if oo_w is not None:
+                tmp.ini_rooks[0][1] = oo_w
+            if ooo_w is not None:
+                tmp.ini_rooks[0][0] = ooo_w
+            if oo_b is not None:
+                tmp.ini_rooks[1][1] = oo_b + 56
+            if ooo_b is not None:
+                tmp.ini_rooks[1][0] = ooo_b + 56
+
+            # Only include rights for which a rook was found.
+            castling_mask = 0
+            if W_OO in cls.castl and oo_w is not None:
+                castling_mask |= W_OO
+            if W_OOO in cls.castl and ooo_w is not None:
+                castling_mask |= W_OOO
+            if B_OO in cls.castl and oo_b is not None:
+                castling_mask |= B_OO
+            if B_OOO in cls.castl and ooo_b is not None:
+                castling_mask |= B_OOO
+            tmp.setCastling(castling_mask)
+            return tmp.reprCastling()
+        else:
+            castl_str = ""
+            if W_OO in cls.castl:
+                castl_str += "K"
+            if W_OOO in cls.castl:
+                castl_str += "Q"
+            if B_OO in cls.castl:
+                castl_str += "k"
+            if B_OOO in cls.castl:
+                castl_str += "q"
+            return castl_str if castl_str else "-"
 
     @classmethod
     def get_fen(cls):
@@ -1134,7 +1187,7 @@ class SetupPositionExtension(_GameInitializationMode):
         pieces = cls.setupmodel.boards[-1].as_fen(variant.variant)
 
         side = "b" if cls.widgets["side_button"].get_active() else "w"
-        castl = "".join(sorted(cls.castl)) if cls.castl else "-"
+        castl = cls._castling_fen(variant_index, pieces)
 
         ep = "-"
         rank = "3" if side == "b" else "6"

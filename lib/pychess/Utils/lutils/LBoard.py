@@ -448,6 +448,22 @@ class LBoard:
                     castling |= B_OO
                 elif char == "q":
                     castling |= B_OOO
+                elif char in [c.upper() for c in reprFile]:
+                    # X-FEN uppercase file letter → white castling right
+                    rook_file = reprFile.index(char.lower())
+                    king_file = FILE(self.kings[WHITE])
+                    if rook_file > king_file:
+                        castling |= W_OO
+                    else:
+                        castling |= W_OOO
+                elif char in reprFile:
+                    # X-FEN lowercase file letter → black castling right
+                    rook_file = reprFile.index(char)
+                    king_file = FILE(self.kings[BLACK])
+                    if rook_file > king_file:
+                        castling |= B_OO
+                    else:
+                        castling |= B_OOO
 
             if self.variant == SCHESS:
                 if char == "K":
