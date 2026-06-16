@@ -73,6 +73,7 @@ from pychess.Savers import fen, pgn
 from pychess.Savers.ChessFile import LoadingError
 from pychess.Variants import variants
 from pychess.Variants.normal import NormalBoard
+from pychess.Utils.setup_castling import castling_field_for_setup as _castling_field_for_setup
 from pychess.perspectives import perspective_manager
 from pychess.perspectives.games import enddir
 from pychess.Utils.eco import find_opening_fen
@@ -1020,8 +1021,6 @@ class SetupPositionExtension(_GameInitializationMode):
 
         cls.widgets["setupPositionSidePanel"].connect_after("size-allocate", callback)
 
-        cls.castl = set()
-
         cls.white = Gtk.Image.new_from_pixbuf(cls.white)
         cls.black = Gtk.Image.new_from_pixbuf(cls.black)
         cls.widgets["side_button"].set_image(cls.white)
@@ -1093,31 +1092,6 @@ class SetupPositionExtension(_GameInitializationMode):
 
     @classmethod
     def castl_toggled(cls, button, castl):
-        lboard = cls.setupmodel.boards[-1].board
-        # TODO: this doesn't work at all
-        if lboard.variant == FISCHERRANDOMCHESS:
-            if castl == W_OO:
-                cast_letter = reprCord[lboard.ini_rooks[0][1]][0].upper()
-            elif castl == W_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[0][0]][0].upper()
-            elif castl == B_OO:
-                cast_letter = reprCord[lboard.ini_rooks[1][1]][0]
-            elif castl == B_OOO:
-                cast_letter = reprCord[lboard.ini_rooks[1][0]][0]
-        else:
-            if castl == W_OO:
-                cast_letter = "K"
-            elif castl == W_OOO:
-                cast_letter = "Q"
-            elif castl == B_OO:
-                cast_letter = "k"
-            elif castl == B_OOO:
-                cast_letter = "q"
-
-        if button.get_active():
-            cls.castl.add(cast_letter)
-        else:
-            cls.castl.discard(cast_letter)
         cls.fen_changed()
 
     @classmethod
@@ -1134,7 +1108,15 @@ class SetupPositionExtension(_GameInitializationMode):
         pieces = cls.setupmodel.boards[-1].as_fen(variant.variant)
 
         side = "b" if cls.widgets["side_button"].get_active() else "w"
-        castl = "".join(sorted(cls.castl)) if cls.castl else "-"
+        lboard = cls.setupmodel.boards[-1].board
+        castl = _castling_field_for_setup(
+            variant_index,
+            cls.widgets["woo"].get_active(),
+            cls.widgets["wooo"].get_active(),
+            cls.widgets["boo"].get_active(),
+            cls.widgets["booo"].get_active(),
+            lboard,
+        )
 
         ep = "-"
         rank = "3" if side == "b" else "6"
